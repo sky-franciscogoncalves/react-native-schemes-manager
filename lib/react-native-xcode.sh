@@ -21,9 +21,8 @@ fi
 shopt -s extglob
 
 # And on to your previously scheduled React Native build script programming.
-eval 'case "$CONFIGURATION" in
-  $DEVELOPMENT_BUILD_CONFIGURATIONS)
-    echo "Debug build!"
+case "$CONFIGURATION" in
+  *Debug*)
     if [[ "$PLATFORM_NAME" == *simulator ]]; then
       if [[ "$FORCE_BUNDLING" ]]; then
         echo "FORCE_BUNDLING enabled; continuing to bundle."
@@ -42,10 +41,9 @@ eval 'case "$CONFIGURATION" in
     exit 1
     ;;
   *)
-    echo "Production build!"
     DEV=false
     ;;
-esac'
+esac
 
 if [ $? -ne 0 ]; then
     echo "error: Failed determining valid build configuration." >&2
@@ -57,7 +55,7 @@ REACT_NATIVE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../react-native" && pw
 SCHEMES_MANAGER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Xcode project file for React Native apps is located in ios/ subfolder
-cd ..
+cd "${REACT_NATIVE_DIR}"/../..
 
 # Define NVM_DIR and source the nvm.sh setup script
 [ -z "$NVM_DIR" ] && export NVM_DIR="$HOME/.nvm"
@@ -84,6 +82,14 @@ fi
 
 [ -z "$CLI_PATH" ] && export CLI_PATH="$REACT_NATIVE_DIR/local-cli/cli.js"
 
+[ -z "$BUNDLE_COMMAND" ] && BUNDLE_COMMAND="bundle"
+
+if [[ -z "$BUNDLE_CONFIG" ]]; then
+  CONFIG_ARG=""
+else
+  CONFIG_ARG="--config $(pwd)/$BUNDLE_CONFIG"
+fi
+
 nodejs_not_found()
 {
   echo "error: Can't find '$NODE_BINARY' binary to build React Native bundle" >&2
@@ -100,25 +106,22 @@ type $NODE_BINARY >/dev/null 2>&1 || nodejs_not_found
 set -x
 DEST=$CONFIGURATION_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH
 
-eval 'case "$CONFIGURATION" in
-  $DEVELOPMENT_BUILD_CONFIGURATIONS)
-  if [[ ! "$PLATFORM_NAME" == *simulator ]]; then
-    PLISTBUDDY='/usr/libexec/PlistBuddy'
-    PLIST=$TARGET_BUILD_DIR/$INFOPLIST_PATH
-    IP=$(ipconfig getifaddr en0)
-    if [ -z "$IP" ]; then
-      IP=$(ifconfig | grep "inet " | grep -v " 127." | cut -d\   -f2  | awk "NR==1{print $1}")
-    fi
-
-    if [ -z ${DISABLE_XIP+x} ]; then
-      IP="$IP.xip.io"
-    fi
-
-    $PLISTBUDDY -c "Add NSAppTransportSecurity:NSExceptionDomains:localhost:NSTemporaryExceptionAllowsInsecureHTTPLoads bool true" "$PLIST"
-    $PLISTBUDDY -c "Add NSAppTransportSecurity:NSExceptionDomains:$IP:NSTemporaryExceptionAllowsInsecureHTTPLoads bool true" "$PLIST"
-    echo "$IP" > "$DEST/ip.txt"
+if [[ "$CONFIGURATION" = "Debug" && ! "$PLATFORM_NAME" == *simulator ]]; then
+  PLISTBUDDY='/usr/libexec/PlistBuddy'
+  PLIST=$TARGET_BUILD_DIR/$INFOPLIST_PATH
+  IP=$(ipconfig getifaddr en0)
+  if [ -z "$IP" ]; then
+    IP=$(ifconfig | grep 'inet ' | grep -v ' 127.' | cut -d\   -f2  | awk 'NR==1{print $1}')
   fi
-esac'
+
+  if [ -z ${DISABLE_XIP+x} ]; then
+    IP="$IP.xip.io"
+  fi
+
+  $PLISTBUDDY -c "Add NSAppTransportSecurity:NSExceptionDomains:localhost:NSTemporaryExceptionAllowsInsecureHTTPLoads bool true" "$PLIST"
+  $PLISTBUDDY -c "Add NSAppTransportSecurity:NSExceptionDomains:$IP:NSTemporaryExceptionAllowsInsecureHTTPLoads bool true" "$PLIST"
+  echo "$IP" > "$DEST/ip.txt"
+fi
 
 if [ $? -ne 0 ]; then
     echo "error: failing determining if plist changes were required." >&2
@@ -127,7 +130,8 @@ fi
 
 BUNDLE_FILE="$DEST/main.jsbundle"
 
-$NODE_BINARY "$CLI_PATH" bundle \
+$NODE_BINARY $CLI_PATH $BUNDLE_COMMAND \
+  $CONFIG_ARG \
   --entry-file "$ENTRY_FILE" \
   --platform ios \
   --dev $DEV \
