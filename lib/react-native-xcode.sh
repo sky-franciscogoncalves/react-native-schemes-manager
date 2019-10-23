@@ -137,7 +137,8 @@ $NODE_BINARY $CLI_PATH $BUNDLE_COMMAND \
   --dev $DEV \
   --reset-cache \
   --bundle-output "$BUNDLE_FILE" \
-  --assets-dest "$DEST"
+  --assets-dest "$DEST" \
+  $EXTRA_PACKAGER_ARGS
 
 # XCode randomly generates user specific workspace files whenever it feels like it.
 # We want these hidden at all times, so go ahead and clean up if they're showing now.
